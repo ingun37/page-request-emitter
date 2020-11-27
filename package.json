@@ -5,7 +5,7 @@
     "url": "https://github.com/ingun37/page-request-emitter"
   },
   "description": "It hooks requests from a puppeteer page, transforms with given mapper, then emits as Observable.",
-  "version": "1.0.0",
+  "version": "1.1",
   "main": "index.js",
   "author": "Ingun Jon",
   "license": "MIT",
