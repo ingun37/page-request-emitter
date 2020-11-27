@@ -27,7 +27,6 @@ export function streamPageEvents<T>(
       await page.setRequestInterception(true);
 
       page.on("request", async (req) => {
-        console.log({requesURL: req.url()})
         if (req.url().startsWith(domain)) {
           if (req.method() === "DELETE") {
             teardown(page, subscriber);
