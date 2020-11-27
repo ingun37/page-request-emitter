@@ -1,10 +1,10 @@
 # About
 
-It hooks requests from a puppeteer page, transforms with given mapper, then emits as *Observable*.
+It hooks requests from a puppeteer page and emits as *Observable*.
 
 # Usage
 
-You can see the complete sample at `test/index.spec.ts`.
+You can see the complete example at `test/index.spec.ts`.
 
 ```typescript
 const browser = puppeteer.launch();

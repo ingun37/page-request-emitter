@@ -1,3 +1,3 @@
-import * as puppeteer from "puppeteer";
+import { Page, Request } from "puppeteer";
 import { Observable } from "rxjs";
-export declare function streamPageEvents<T>(browser: puppeteer.Browser, domain: string, html: string, pageMap: (p: puppeteer.Page, r: puppeteer.Request) => Promise<T>): Observable<T>;
+export declare function streamPageEvents<T>(browser: any, domain: string, html: string, pageMap: (p: Page, r: Request) => Promise<T>): Observable<T>;

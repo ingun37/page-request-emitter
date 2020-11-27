@@ -1,29 +1,29 @@
 import * as P from "path";
 import * as os from "os";
-import * as puppeteer from "puppeteer";
+import {Browser, Page, Request} from "puppeteer";
 import { v4 as uuidv4 } from "uuid";
 import { Observable, Subscriber } from "rxjs";
 import * as fs from "fs";
 import * as U from "url";
 
-async function teardown<A>(page: puppeteer.Page, subscriber: Subscriber<A>) {
+async function teardown<A>(page: Page, subscriber: Subscriber<A>) {
   page.removeAllListeners();
   await page.close();
   subscriber.complete();
 }
 
 export function streamPageEvents<T>(
-  browser: puppeteer.Browser,
+  browser: any,
   domain: string,
   html: string,
-  pageMap: (p: puppeteer.Page, r: puppeteer.Request) => Promise<T>
+  pageMap: (p: Page, r: Request) => Promise<T>
 ): Observable<T> {
   const tmpHTMLpath = P.resolve(os.tmpdir(), `tmphtml-${uuidv4()}.html`);
 
   fs.writeFileSync(tmpHTMLpath, html);
 
   return new Observable((subscriber) => {
-    browser.newPage().then(async (page) => {
+    (browser as Browser).newPage().then(async (page) => {
       await page.setRequestInterception(true);
 
       page.on("request", async (req) => {
