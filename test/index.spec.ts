@@ -4,7 +4,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RequestData } from "./types";
 import { templateMaker } from "./template";
 import { toArray } from "rxjs/operators";
-import { cons } from "fp-ts/lib/ReadonlyArray";
 
 var browser: pt.Browser | undefined = undefined;
 
