@@ -19,3 +19,13 @@ export const templateMaker = (url: string) => (testData: RequestData[]) => {
     </div>
   );
 };
+
+export const errorTemplate = (url:string) => {
+  return (
+    <div>
+      <script type="text/javascript" dangerouslySetInnerHTML={{ __html: `
+      throw "what";
+      ` }}></script>
+    </div>
+  );
+}

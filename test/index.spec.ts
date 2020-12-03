@@ -2,7 +2,7 @@ import pt from "puppeteer";
 import { streamPageEvents } from "../src";
 import { renderToStaticMarkup } from "react-dom/server";
 import { RequestData } from "./types";
-import { templateMaker } from "./template";
+import { errorTemplate, templateMaker } from "./template";
 import { toArray } from "rxjs/operators";
 
 var browser: pt.Browser | undefined = undefined;
@@ -30,7 +30,12 @@ test("test 1", (done) => {
   const html = renderToStaticMarkup(templateMaker(domain)(testData));
   console.log(html)
   if (browser) {
-    streamPageEvents(browser, domain, html, async (page, req) => req.postData()).pipe(
+    streamPageEvents(browser, domain, html, 
+      async (page, req) => req.postData(),
+      async (mesage) => {console.log({fromPage:mesage});},
+      (e) => {throw e},
+      (e)=>{throw e}
+      ).pipe(
       toArray()
     ).subscribe({
       next(output) {
@@ -54,7 +59,12 @@ test("test 2", (done) => {
   const html = renderToStaticMarkup(templateMaker(domain)(testData));
   console.log(html)
   if (browser) {
-    streamPageEvents(browser, domain, html, async (page, req) => req.postData()).pipe(
+    streamPageEvents(browser, domain, html, 
+      async (page, req) => req.postData(),
+      m => console.log({fromPage:m}),
+      e => {throw e;},
+      e => {throw e;}
+      ).pipe(
       toArray()
     ).subscribe({
       next(output) {
@@ -67,3 +77,20 @@ test("test 2", (done) => {
   }
 });
 
+class PageError extends Error {}
+
+test("test3", ()=>{
+  const domain = "http://aoeu.com";
+  const html = renderToStaticMarkup(errorTemplate(domain));
+  if(browser) {
+    const ob = streamPageEvents(browser, domain, html,
+      async (page, req):Promise<string> => { throw "hcdtgcch"; },
+      m => {throw "aoeuaoeu"},
+      e => {throw "onhcno.u";},
+      e => {throw new PageError;}
+    );
+    return expect(ob.toPromise()).rejects.toThrow(PageError);
+  } else {
+    return expect(false).toBeTruthy();
+  }
+})
