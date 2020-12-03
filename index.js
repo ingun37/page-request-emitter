@@ -26,49 +26,70 @@ const uuid_1 = require("uuid");
 const rxjs_1 = require("rxjs");
 const fs = __importStar(require("fs"));
 const U = __importStar(require("url"));
-async function teardown(page, subscriber) {
+async function teardown(page) {
     page.removeAllListeners();
     await page.close();
-    subscriber.complete();
 }
-function streamPageEvents(browser, domain, html, pageMap) {
+function streamPageEvents(browser, domain, html, requestMap, onMessage, onError, onPageError
+// pageMap: (p: Page, r: Request | null, message: string | null, error: Error | null, pageError: Error | null) => Promise<T>
+) {
     const tmpHTMLpath = P.resolve(os.tmpdir(), `tmphtml-${uuid_1.v4()}.html`);
     fs.writeFileSync(tmpHTMLpath, html);
     return new rxjs_1.Observable((subscriber) => {
         browser.newPage().then(async (page) => {
             await page.setRequestInterception(true);
             page.on("request", async (req) => {
-                if (req.url().startsWith(domain)) {
-                    if (req.method() === "DELETE") {
-                        teardown(page, subscriber);
-                    }
-                    else if (req.method() === "PUT") {
-                        subscriber.next(await pageMap(page, req));
-                        teardown(page, subscriber);
+                try {
+                    if (req.url().startsWith(domain)) {
+                        if (req.method() === "DELETE") {
+                            teardown(page);
+                            subscriber.complete();
+                        }
+                        else if (req.method() === "PUT") {
+                            subscriber.next(await requestMap(page, req));
+                            teardown(page);
+                            subscriber.complete();
+                        }
+                        else {
+                            subscriber.next(await requestMap(page, req));
+                            req.respond({ status: 200 });
+                        }
                     }
                     else {
-                        subscriber.next(await pageMap(page, req));
-                        req.respond({ status: 200 });
+                        req.continue();
                     }
                 }
-                else {
-                    req.continue();
+                catch (error) {
+                    teardown(page);
+                    subscriber.error(error);
                 }
             });
-            page.on("console", (message) => {
-                console.log({
-                    puppeteerMessage: message.text(),
-                });
+            page.on("console", async (message) => {
+                try {
+                    onMessage(message.text());
+                }
+                catch (error) {
+                    teardown(page);
+                    subscriber.error(error);
+                }
             });
-            page.on("error", (error) => {
-                console.error({
-                    puppeteerError: error,
-                });
+            page.on("error", (e) => {
+                try {
+                    onError(e);
+                }
+                catch (e) {
+                    teardown(page);
+                    subscriber.error(e);
+                }
             });
-            page.on("pageerror", (error) => {
-                console.error({
-                    puppeteerPageError: error,
-                });
+            page.on("pageerror", (e) => {
+                try {
+                    onPageError(e);
+                }
+                catch (e) {
+                    teardown(page);
+                    subscriber.error(e);
+                }
             });
             const url = U.pathToFileURL(tmpHTMLpath).toString();
             await page.goto(url);
