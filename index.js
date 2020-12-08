@@ -30,13 +30,14 @@ async function teardown(page) {
     page.removeAllListeners();
     await page.close();
 }
-function streamPageEvents(browser, domain, html, requestMap, onMessage, onError, onPageError
+function streamPageEvents(browser, domain, html, initPage, requestMap, onMessage, onError, onPageError
 // pageMap: (p: Page, r: Request | null, message: string | null, error: Error | null, pageError: Error | null) => Promise<T>
 ) {
     const tmpHTMLpath = P.resolve(os.tmpdir(), `tmphtml-${uuid_1.v4()}.html`);
     fs.writeFileSync(tmpHTMLpath, html);
     return new rxjs_1.Observable((subscriber) => {
         browser.newPage().then(async (page) => {
+            await initPage(page);
             await page.setRequestInterception(true);
             page.on("request", async (req) => {
                 try {

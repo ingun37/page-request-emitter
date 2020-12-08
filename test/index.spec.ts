@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RequestData } from "./types";
 import { errorTemplate, templateMaker } from "./template";
 import { toArray } from "rxjs/operators";
+import { identity } from "fp-ts/lib/function";
 
 var browser: pt.Browser | undefined = undefined;
 
@@ -30,7 +31,7 @@ test("test 1", (done) => {
   const html = renderToStaticMarkup(templateMaker(domain)(testData));
   console.log(html)
   if (browser) {
-    streamPageEvents(browser, domain, html, 
+    streamPageEvents(browser, domain, html, x => Promise.resolve(x),
       async (page, req) => req.postData(),
       async (mesage) => {console.log({fromPage:mesage});},
       (e) => {throw e},
@@ -59,7 +60,7 @@ test("test 2", (done) => {
   const html = renderToStaticMarkup(templateMaker(domain)(testData));
   console.log(html)
   if (browser) {
-    streamPageEvents(browser, domain, html, 
+    streamPageEvents(browser, domain, html, x => Promise.resolve(x),
       async (page, req) => req.postData(),
       m => console.log({fromPage:m}),
       e => {throw e;},
@@ -83,7 +84,7 @@ test("test3", ()=>{
   const domain = "http://aoeu.com";
   const html = renderToStaticMarkup(errorTemplate(domain));
   if(browser) {
-    const ob = streamPageEvents(browser, domain, html,
+    const ob = streamPageEvents(browser, domain, html, x => Promise.resolve(x),
       async (page, req):Promise<string> => { throw "hcdtgcch"; },
       m => {throw "aoeuaoeu"},
       e => {throw "onhcno.u";},

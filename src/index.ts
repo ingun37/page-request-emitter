@@ -15,6 +15,7 @@ export function streamPageEvents<T>(
   browser: any,
   domain: string,
   html: string,
+  initPage: (p:Page) => Promise<Page>,
   requestMap: (p: Page, r: Request) => Promise<T>,
   onMessage: (m: string) => void,
   onError: (e: Error) => void,
@@ -27,6 +28,7 @@ export function streamPageEvents<T>(
 
   return new Observable((subscriber) => {
     (browser as Browser).newPage().then(async (page) => {
+      await initPage(page);
       await page.setRequestInterception(true);
 
       page.on("request", async (req) => {
