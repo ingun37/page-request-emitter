@@ -1,88 +1,103 @@
 import * as P from "path";
 import * as os from "os";
-import { Browser, Page, Request } from "puppeteer";
-import { v4 as uuidv4 } from "uuid";
-import { Observable, Subscriber } from "rxjs";
+import {Browser, Page, Request} from "puppeteer";
+import {v4 as uuidv4} from "uuid";
+import {from, Observable, Subscriber} from "rxjs";
+import * as O from "rxjs/operators";
+
 import * as fs from "fs";
 import * as U from "url";
+import {Either} from "fp-ts/Either";
+import * as E from "fp-ts/Either";
+import * as T from "fp-ts/Tuple";
+import * as F from "fp-ts/function";
+import {renderToStaticMarkup} from "react-dom/server";
 
-async function teardown<A>(page: Page) {
-  page.removeAllListeners();
-  await page.close();
+
+export type PageEvent = Either<Error, [Page, Request]>;
+
+export class PageError extends Error {};
+export function streamPageEvents(page: Page, url: U.URL, hookDomain: string): Observable<PageEvent> {
+    return new Observable<PageEvent>(subscriber => {
+        page.setRequestInterception(true).then(() => {
+            page.on("request", async (req) => {
+                const tuple: [Page, Request] = [page, req];
+                try {
+                    if (req.url().startsWith(hookDomain)) {
+                        console.log("hooked");
+                        if (req.method() === "DELETE") {
+                            subscriber.complete();
+                        } else if (req.method() === "PUT") {
+                            subscriber.next(E.right(tuple));
+                            subscriber.complete();
+                        } else {
+                            subscriber.next(E.right(tuple));
+                            req.respond({status: 200});
+                        }
+                    } else {
+                        req.continue();
+                    }
+                } catch (error) {
+                    subscriber.error(error);
+                }
+            });
+
+            page.on("error", (e) => {
+                subscriber.next(E.left(e));
+            });
+
+            page.on("pageerror", (e) => {
+                console.log("page error", e);
+                subscriber.next(E.left(new PageError(e.message)));
+            });
+
+            page.goto(url.toString()).then(rsp => {
+                if (rsp) {
+                    if (rsp.ok()) {
+                        console.log("page load success");
+                    } else {
+                        console.error(url, " responded ", rsp.statusText());
+                        subscriber.error(new Error(rsp.statusText()))
+                    }
+                } else {
+                    console.error(url, "responded null");
+                    subscriber.error(new Error(url.toString() + " responded null"));
+                }
+            })
+        })
+    })
 }
 
-export function streamPageEvents<T>(
-  browser: any,
-  domain: string,
-  html: string,
-  initPage: (p:Page) => Promise<Page>,
-  requestMap: (p: Page, r: Request) => Promise<T>,
-  onMessage: (m: string) => void,
-  onError: (e: Error) => void,
-  onPageError: (e: Error) => void
-  // pageMap: (p: Page, r: Request | null, message: string | null, error: Error | null, pageError: Error | null) => Promise<T>
-): Observable<T> {
-  const tmpHTMLpath = P.resolve(os.tmpdir(), `tmphtml-${uuidv4()}.html`);
+export function streamNewPageEvents(browser: Browser, hookDomain: string, html: string): Observable<PageEvent> {
+    const urlToHTML = U.pathToFileURL(createTmpHTMLFile(html));
+    return new Observable<PageEvent>(subscriber => {
+        browser.newPage().then(page => {
+            streamPageEvents(page, urlToHTML, hookDomain).subscribe({
+                next: subscriber.next.bind(subscriber),
+                error(err) {
+                    console.log("error: closing page ...");
+                    page.close().then(() => {
+                        console.log('page closed');
+                        subscriber.error(err)
+                    }).catch(closeError => subscriber.error([closeError, err]));
+                },
+                complete() {
+                    page.close().then(() => {
+                        console.log("page closed");
+                        subscriber.complete()
+                    }).catch(closeError => subscriber.error(closeError));
+                }
+            })
+        }).catch(err => {
+            subscriber.error(err)
+        })
+    })
+}
 
-  fs.writeFileSync(tmpHTMLpath, html);
+export const streamNewPageEventsJSX = (jsx: JSX.Element) => (browser: Browser, hookDomain: string) => streamNewPageEvents(browser, hookDomain, renderToStaticMarkup(jsx));
 
-  return new Observable((subscriber) => {
-    (browser as Browser).newPage().then(async (page) => {
-      await initPage(page);
-      await page.setRequestInterception(true);
-
-      page.on("request", async (req) => {
-        try {
-          if (req.url().startsWith(domain)) {
-            if (req.method() === "DELETE") {
-              teardown(page);
-              subscriber.complete();
-            } else if (req.method() === "PUT") {
-              subscriber.next(await requestMap(page, req));
-              teardown(page);
-              subscriber.complete();
-            } else {
-              subscriber.next(await requestMap(page, req));
-              req.respond({ status: 200 });
-            }
-          } else {
-            req.continue();
-          }
-        } catch (error) {
-          teardown(page);
-          subscriber.error(error);
-        }
-      });
-
-      page.on("console", async (message) => {
-        try {
-          onMessage(message.text());
-        } catch (error) {
-          teardown(page);
-          subscriber.error(error);
-        }
-      });
-
-      page.on("error", (e) => {
-        try {
-          onError(e);
-        } catch (e) {
-          teardown(page);
-          subscriber.error(e);
-        }
-      });
-
-      page.on("pageerror", (e) => {
-        try {
-          onPageError(e);
-        } catch (e) {
-          teardown(page);
-          subscriber.error(e);
-        }
-      });
-
-      const url = U.pathToFileURL(tmpHTMLpath).toString();
-      await page.goto(url);
-    });
-  });
+export function createTmpHTMLFile(html: string): string {
+    const tmpHTMLpath = P.resolve(os.tmpdir(), `tmphtml-${uuidv4()}.html`);
+    fs.writeFileSync(tmpHTMLpath, html);
+    return tmpHTMLpath;
 }

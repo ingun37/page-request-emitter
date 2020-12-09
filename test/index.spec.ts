@@ -1,97 +1,83 @@
 import pt from "puppeteer";
-import { streamPageEvents } from "../src";
-import { renderToStaticMarkup } from "react-dom/server";
-import { RequestData } from "./types";
-import { errorTemplate, templateMaker } from "./template";
-import { toArray } from "rxjs/operators";
-import { identity } from "fp-ts/lib/function";
+import {streamPageEvents, createTmpHTMLFile, PageEvent, streamNewPageEvents, streamNewPageEventsJSX, PageError} from "../src";
+
+import {renderToStaticMarkup} from "react-dom/server";
+import {RequestData} from "./types";
+import {errorTemplate, templateMaker} from "./template";
+import {toArray, map} from "rxjs/operators";
+import * as E from "fp-ts/Either";
+import * as A from "fp-ts/Array";
+
+
+import * as U from "url";
+import {pipe} from "rxjs";
+import {identity} from "fp-ts/function";
 
 var browser: pt.Browser | undefined = undefined;
-
 beforeAll(async () => {
-  browser = await pt.launch({
-    headless: false,
-    args: ["--no-sandbox", "--disable-web-security"],
-  });
+    browser = await pt.launch({
+        headless: false,
+        args: ["--no-sandbox", "--disable-web-security"],
+    });
 });
 
 afterAll(async () => {
-  if(browser) {
-    await browser.close();
-  }
+    if (browser) {
+        await browser.close();
+    }
 });
 
 
 test("test 1", (done) => {
-  const testData:RequestData[] = [
-    ["POST", "this is post"],
-    ["PUT", "this is put"]
-  ];
-  const domain = "http://test-domain.com"
-  const html = renderToStaticMarkup(templateMaker(domain)(testData));
-  console.log(html)
-  if (browser) {
-    streamPageEvents(browser, domain, html, x => Promise.resolve(x),
-      async (page, req) => req.postData(),
-      async (mesage) => {console.log({fromPage:mesage});},
-      (e) => {throw e},
-      (e)=>{throw e}
-      ).pipe(
-      toArray()
+    const hookDomain = "http://test-domain.com"
+    const testData: RequestData[] = [
+        ["POST", "this is post"],
+        ["PUT", "this is put"]
+    ];
+    streamNewPageEventsJSX(templateMaker(hookDomain)(testData))(browser!, hookDomain).pipe(
+        map(E.map(x => x[1].postData())),
+        toArray(),
+        map(A.sequence(E.either))
     ).subscribe({
-      next(output) {
-        expect(output).toStrictEqual(testData.map(x=>x[1]))
-      },
-      complete: done
-    })
-  } else {
-    expect(false).toBeTruthy()
-  }
+        next(output) {
+            console.log("outputs", output)
+            expect(output).toStrictEqual(E.right(testData.map(x => x[1])))
+        },
+        complete: done
+    });
 });
 
 
 test("test 2", (done) => {
-  const testData:RequestData[] = [
-    ["POST", "this is post"],
-    ["POST", "this is second post"],
-    ["DELETE", "this shouldn't matter"]
-  ];
-  const domain = "http://test-domain.com"
-  const html = renderToStaticMarkup(templateMaker(domain)(testData));
-  console.log(html)
-  if (browser) {
-    streamPageEvents(browser, domain, html, x => Promise.resolve(x),
-      async (page, req) => req.postData(),
-      m => console.log({fromPage:m}),
-      e => {throw e;},
-      e => {throw e;}
-      ).pipe(
-      toArray()
+    const testData: RequestData[] = [
+        ["POST", "this is post"],
+        ["POST", "this is second post"],
+        ["DELETE", "this shouldn't matter"]
+    ];
+    const domain = "http://test-domain.com";
+    streamNewPageEventsJSX(templateMaker(domain)(testData))(browser!, domain).pipe(
+        map(E.map(x => x[1].postData())),
+        toArray(),
+        map(A.sequence(E.either))
     ).subscribe({
-      next(output) {
-        expect(output).toStrictEqual(testData.map(x=>x[1]).slice(0,2))
-      },
-      complete: done
+        next(output) {
+            const exp = testData.map(x => x[1]).slice(0, 2);
+            expect(output).toStrictEqual(E.right(exp));
+        },
+        complete: done
     })
-  } else {
-    expect(false).toBeTruthy()
-  }
+
 });
 
-class PageError extends Error {}
 
 test("test3", ()=>{
   const domain = "http://aoeu.com";
-  const html = renderToStaticMarkup(errorTemplate(domain));
-  if(browser) {
-    const ob = streamPageEvents(browser, domain, html, x => Promise.resolve(x),
-      async (page, req):Promise<string> => { throw "hcdtgcch"; },
-      m => {throw "aoeuaoeu"},
-      e => {throw "onhcno.u";},
-      e => {throw new PageError;}
-    );
-    return expect(ob.toPromise()).rejects.toThrow(PageError);
-  } else {
-    return expect(false).toBeTruthy();
-  }
+  const p = streamNewPageEventsJSX(errorTemplate(domain))(browser!, domain).pipe(
+      map(E.fold(
+          e => {throw e;},
+          identity
+      ))
+  ).toPromise();
+
+  return expect(p).rejects.toThrow("what");
 })
