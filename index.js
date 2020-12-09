@@ -92,18 +92,9 @@ function streamNewPageEvents(browser, hookDomain, html) {
         browser.newPage().then(page => {
             streamPageEvents(page, urlToHTML, hookDomain).subscribe({
                 next: subscriber.next.bind(subscriber),
-                error(err) {
-                    console.log("error: closing page ...");
-                    page.close().then(() => {
-                        console.log('page closed');
-                        subscriber.error(err);
-                    }).catch(closeError => subscriber.error([closeError, err]));
-                },
+                error: subscriber.error.bind(subscriber),
                 complete() {
-                    page.close().then(() => {
-                        console.log("page closed");
-                        subscriber.complete();
-                    }).catch(closeError => subscriber.error(closeError));
+                    subscriber.complete();
                 }
             });
         }).catch(err => {
