@@ -5,11 +5,12 @@
     "url": "https://github.com/ingun37/page-request-emitter"
   },
   "description": "It hooks requests from a puppeteer page, transforms with given mapper, then emits as Observable.",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "main": "index.js",
   "author": "Ingun Jon",
   "license": "MIT",
   "dependencies": {
+    "react-dom": "^17.0.1",
     "uuid": "^8.3.1"
   },
   "peerDependencies": {
@@ -27,7 +28,6 @@
     "jest": "^26.6.3",
     "puppeteer": "^5.5.0",
     "react": "^17.0.1",
-    "react-dom": "^17.0.1",
     "rxjs": "^6.6.3",
     "ts-jest": "^26.4.4",
     "typescript": "^4.1.2"
