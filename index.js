@@ -19,7 +19,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createTmpHTMLFile = exports.streamNewPageEventsJSX = exports.streamNewPageEvents = exports.streamPageEvents = exports.PageError = void 0;
+exports.createTmpHTMLFile = exports.streamNewPageEventsJSX = exports.streamNewPageEvents = exports.streamPageEvents = void 0;
 const P = __importStar(require("path"));
 const os = __importStar(require("os"));
 const uuid_1 = require("uuid");
@@ -28,27 +28,22 @@ const fs = __importStar(require("fs"));
 const U = __importStar(require("url"));
 const E = __importStar(require("fp-ts/Either"));
 const server_1 = require("react-dom/server");
-class PageError extends Error {
-}
-exports.PageError = PageError;
-;
 function streamPageEvents(page, url, hookDomain) {
     return new rxjs_1.Observable(subscriber => {
         page.setRequestInterception(true).then(() => {
             page.on("request", async (req) => {
-                const tuple = [page, req];
                 try {
                     if (req.url().startsWith(hookDomain)) {
-                        console.log("hooked");
+                        const tup = E.right([page, { _tag: 'RequestIntercept', request: req }]);
                         if (req.method() === "DELETE") {
                             subscriber.complete();
                         }
                         else if (req.method() === "PUT") {
-                            subscriber.next(E.right(tuple));
+                            subscriber.next(tup);
                             subscriber.complete();
                         }
                         else {
-                            subscriber.next(E.right(tuple));
+                            subscriber.next(tup);
                             req.respond({ status: 200 });
                         }
                     }
@@ -65,7 +60,10 @@ function streamPageEvents(page, url, hookDomain) {
             });
             page.on("pageerror", (e) => {
                 console.log("page error", e);
-                subscriber.next(E.left(new PageError(e.message)));
+                subscriber.next(E.left(e));
+            });
+            page.on("console", (pageEventObj) => {
+                subscriber.next(E.right([page, { _tag: 'Log', message: pageEventObj.text() }]));
             });
             page.goto(url.toString()).then(rsp => {
                 if (rsp) {

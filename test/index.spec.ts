@@ -1,16 +1,10 @@
 import pt from "puppeteer";
-import {streamPageEvents, createTmpHTMLFile, PageEvent, streamNewPageEvents, streamNewPageEventsJSX, PageError} from "../src";
-
-import {renderToStaticMarkup} from "react-dom/server";
+import {streamNewPageEventsJSX} from "../src";
 import {RequestData} from "./types";
-import {errorTemplate, templateMaker} from "./template";
-import {toArray, map} from "rxjs/operators";
+import {errorTemplate, logTemplate, templateMaker} from "./template";
+import {map, toArray} from "rxjs/operators";
 import * as E from "fp-ts/Either";
 import * as A from "fp-ts/Array";
-
-
-import * as U from "url";
-import {pipe} from "rxjs";
 import {identity} from "fp-ts/function";
 
 var browser: pt.Browser | undefined = undefined;
@@ -35,7 +29,14 @@ test("test 1", (done) => {
         ["PUT", "this is put"]
     ];
     streamNewPageEventsJSX(templateMaker(hookDomain)(testData))(browser!, hookDomain).pipe(
-        map(E.map(x => x[1].postData())),
+        map(E.chainW(x => {
+            switch (x[1]._tag) {
+                case "Log":
+                    return E.left("Got Log instead of RequestIntercept: " + x[1].message);
+                case "RequestIntercept":
+                    return E.right(x[1].request.postData())
+            }
+        })),
         toArray(),
         map(A.sequence(E.either))
     ).subscribe({
@@ -56,7 +57,14 @@ test("test 2", (done) => {
     ];
     const domain = "http://test-domain.com";
     streamNewPageEventsJSX(templateMaker(domain)(testData))(browser!, domain).pipe(
-        map(E.map(x => x[1].postData())),
+        map(E.chainW(x => {
+            switch (x[1]._tag) {
+                case "RequestIntercept":
+                    return E.right(x[1].request.postData());
+                case "Log":
+                    return E.left("Got Log instead of RequestIntercept: " + x[1].message);
+            }
+        })),
         toArray(),
         map(A.sequence(E.either))
     ).subscribe({
@@ -70,14 +78,34 @@ test("test 2", (done) => {
 });
 
 
-test("test3", ()=>{
-  const domain = "http://aoeu.com";
-  const p = streamNewPageEventsJSX(errorTemplate(domain))(browser!, domain).pipe(
-      map(E.fold(
-          e => {throw e;},
-          identity
-      ))
-  ).toPromise();
+test("test3", () => {
+    const domain = "http://aoeu.com";
+    const p = streamNewPageEventsJSX(errorTemplate(domain))(browser!, domain).pipe(
+        map(E.fold(
+            e => {
+                console.log(e);
+                throw e;
+            },
+            identity
+        ))
+    ).toPromise();
 
-  return expect(p).rejects.toThrow("what");
+    return expect(p).rejects.toThrow("what");
+})
+
+test("log test", () => {
+    const domain = "http://aoeu.com";
+    const logs = ['Life', 'the Universe', 'and Everything']
+    return streamNewPageEventsJSX(logTemplate(domain, logs))(browser!, domain).pipe(
+        map(E.chainW(([_, xxx]) => {
+            switch (xxx._tag) {
+                case "Log": return E.right( xxx.message);
+                case "RequestIntercept": return E.left("Expected Log but got Request");
+            }
+        })),
+        toArray(),
+        map(A.sequence(E.either))
+    ).toPromise().then(xxxx => {
+        expect(xxxx).toStrictEqual(E.right(logs))
+    });
 })
