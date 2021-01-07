@@ -15,8 +15,7 @@ export declare type RequestIntercept = {
 };
 export declare type PPEvent = Log | RequestIntercept;
 export declare type Config = {
-    hookDomain: string;
-    tapRequest: (r: Request) => void;
+    filter: (r: Request) => boolean;
 };
 export declare function streamPageEvents(page: Page, url: U.URL): ReaderObservableEither<Config, Error, PPEvent>;
 export declare function createNewPage(): ReaderTaskEither<Browser, Error, Page>;

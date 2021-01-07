@@ -37,8 +37,7 @@ function streamPageEvents(page, url) {
             page.setRequestInterception(true).then(() => {
                 page.on("request", async (req) => {
                     try {
-                        config.tapRequest(req);
-                        if (req.url().startsWith(config.hookDomain)) {
+                        if (config.filter(req)) {
                             const requestEvent = { _tag: 'RequestIntercept', request: req };
                             if (req.method() === "DELETE") {
                                 subscriber.complete();
