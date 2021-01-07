@@ -1,15 +1,18 @@
 import * as P from "path";
 import * as os from "os";
-import {Browser, Page, Request} from "puppeteer";
+import {Browser, launch, LaunchOptions, Page, Request} from "puppeteer";
 import {v4 as uuidv4} from "uuid";
 import {Observable} from "rxjs";
 
 import * as fs from "fs";
 import * as U from "url";
+import {pathToFileURL, URL} from "url";
 import * as E from "fp-ts/Either";
-import {Either} from "fp-ts/Either";
+import {Either, right} from "fp-ts/Either";
 import {renderToStaticMarkup} from "react-dom/server";
-
+import {ReaderObservableEither} from "fp-ts-rxjs/lib/ReaderObservableEither";
+import {bracket, tryCatchK} from "fp-ts/TaskEither";
+import {ReaderTaskEither} from "fp-ts/ReaderTaskEither";
 
 export type Log = {
     readonly _tag: 'Log';
@@ -21,83 +24,115 @@ export type RequestIntercept = {
     readonly request: Request;
 }
 
-export type PageEvent = Either<Error, [Page, Log | RequestIntercept]>;
+export type PPEvent = Log | RequestIntercept;
 
-export function streamPageEvents(page: Page, url: U.URL, hookDomain: string): Observable<PageEvent> {
-    return new Observable<PageEvent>(subscriber => {
-        page.setRequestInterception(true).then(() => {
-            page.on("request", async (req) => {
-                try {
-                    if (req.url().startsWith(hookDomain)) {
-                        const tup: PageEvent = E.right([page, {_tag: 'RequestIntercept', request: req}]);
-                        if (req.method() === "DELETE") {
-                            subscriber.complete();
-                        } else if (req.method() === "PUT") {
-                            subscriber.next(tup);
-                            subscriber.complete();
+export type Config = {
+    hookDomain: string,
+    tapRequest: (r: Request) => void
+}
+
+export function streamPageEvents(page: Page, url: U.URL): ReaderObservableEither<Config, Error, PPEvent> {
+    return (config: Config) => {
+        return new Observable<Either<Error, PPEvent>>(subscriber => {
+            page.setRequestInterception(true).then(() => {
+                page.on("request", async (req) => {
+                    try {
+                        config.tapRequest(req);
+                        if (req.url().startsWith(config.hookDomain)) {
+                            const requestEvent: RequestIntercept = {_tag: 'RequestIntercept', request: req};
+                            if (req.method() === "DELETE") {
+                                subscriber.complete();
+                            } else if (req.method() === "PUT") {
+                                subscriber.next(right(requestEvent));
+                                subscriber.complete();
+                            } else {
+                                subscriber.next(right(requestEvent));
+                                req.respond({status: 200});
+                            }
                         } else {
-                            subscriber.next(tup);
-                            req.respond({status: 200});
+                            req.continue();
+                        }
+                    } catch (error) {
+                        subscriber.error(error);
+                    }
+                });
+
+                page.on("error", (e) => {
+                    subscriber.next(E.left(e));
+                });
+
+                page.on("pageerror", (e) => {
+                    console.log("page error", e);
+                    subscriber.next(E.left(e));
+                });
+
+                page.on("console", (pageEventObj) => {
+                    subscriber.next(right({_tag: 'Log', message: pageEventObj.text()}))
+                })
+
+                page.goto(url.toString()).then(rsp => {
+                    if (rsp) {
+                        if (rsp.ok()) {
+                            console.log("page load success");
+                        } else {
+                            console.error(url, " responded ", rsp.statusText());
+                            subscriber.error(new Error(rsp.statusText()))
                         }
                     } else {
-                        req.continue();
+                        console.error(url, "responded null");
+                        subscriber.error(new Error(url.toString() + " responded null"));
                     }
-                } catch (error) {
-                    subscriber.error(error);
-                }
-            });
-
-            page.on("error", (e) => {
-                subscriber.next(E.left(e));
-            });
-
-            page.on("pageerror", (e) => {
-                console.log("page error", e);
-                subscriber.next(E.left(e));
-            });
-
-            page.on("console", (pageEventObj) => {
-                subscriber.next(E.right([page, {_tag: 'Log', message: pageEventObj.text()}]))
-            })
-
-            page.goto(url.toString()).then(rsp => {
-                if (rsp) {
-                    if (rsp.ok()) {
-                        console.log("page load success");
-                    } else {
-                        console.error(url, " responded ", rsp.statusText());
-                        subscriber.error(new Error(rsp.statusText()))
-                    }
-                } else {
-                    console.error(url, "responded null");
-                    subscriber.error(new Error(url.toString() + " responded null"));
-                }
+                })
             })
         })
-    })
+    }
 }
 
-export function streamNewPageEvents(browser: Browser, hookDomain: string, html: string): Observable<PageEvent> {
-    const urlToHTML = U.pathToFileURL(createTmpHTMLFile(html));
-    return new Observable<PageEvent>(subscriber => {
-        browser.newPage().then(page => {
-            streamPageEvents(page, urlToHTML, hookDomain).subscribe({
-                next: subscriber.next.bind(subscriber),
-                error: subscriber.error.bind(subscriber),
-                complete() {
-                    subscriber.complete()
-                }
-            })
-        }).catch(err => {
-            subscriber.error(err)
-        })
-    })
+export function createNewPage(): ReaderTaskEither<Browser, Error, Page> {
+    return tryCatchK((browser: Browser) => {
+        return browser.newPage();
+    }, err => {
+        console.error(err);
+        return new Error("Creating new page failed");
+    });
 }
 
-export const streamNewPageEventsJSX = (jsx: JSX.Element) => (browser: Browser, hookDomain: string) => streamNewPageEvents(browser, hookDomain, renderToStaticMarkup(jsx));
 
-export function createTmpHTMLFile(html: string): string {
+export function createTmpHTMLURL(html: string): URL {
     const tmpHTMLpath = P.resolve(os.tmpdir(), `tmphtml-${uuidv4()}.html`);
     fs.writeFileSync(tmpHTMLpath, html);
-    return tmpHTMLpath;
+    return pathToFileURL(tmpHTMLpath);
+}
+
+export const createTmpHTMLURL_JSX = (jsx: JSX.Element) => createTmpHTMLURL(renderToStaticMarkup(jsx));
+
+function launchBrowser(o: LaunchOptions) {
+    return launch(o);
+}
+
+export function runWithBrowser<_T>(launchOptions: LaunchOptions, browserReadingTask: ReaderTaskEither<Browser, Error, _T>) {
+    const tmpUserDataDir = P.resolve(os.tmpdir(), "user-data-dir-" + uuidv4());
+    fs.mkdirSync(tmpUserDataDir);
+    return bracket(
+        tryCatchK(launchBrowser, err => {
+            if (err instanceof Error) {
+                return err
+            } else {
+                console.error(err);
+                return new Error("Launching browser fail");
+            }
+        })(launchOptions),
+        browserReadingTask,
+        (browser) => tryCatchK(() => {
+            console.log("Releasing browser ...");
+            return browser.close();
+        }, err => {
+            if (err instanceof Error) {
+                return err
+            } else {
+                console.error(err);
+                return new Error("Releasing browser fail");
+            }
+        })()
+    )
 }
