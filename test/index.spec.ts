@@ -19,9 +19,7 @@ function common(hookDomain: string, jsx: JSX.Element) {
             pageinstance(browser),
             fromTaskEither,
             observableEither.chain(page => streamPageEvents(page, pageurl)({
-                hookDomain: hookDomain,
-                tapRequest: () => {
-                }
+                filter: (r) => r.url().startsWith(hookDomain)
             })),
             observable.map(either.chainW(sum => {
                 switch (sum._tag) {
@@ -83,9 +81,7 @@ test("test3", () => {
             createNewPage()(browser),
             fromTaskEither,
             observableEither.chain(page => streamPageEvents(page, pageurl)({
-                hookDomain: domain,
-                tapRequest: () => {
-                }
+                filter: r => r.url().startsWith(domain)
             })),
             take(1),
             toTaskEither
@@ -107,9 +103,7 @@ test("log test", () => {
             createNewPage()(browser),
             fromTaskEither,
             observableEither.chain(page => streamPageEvents(page, pageurl)({
-                hookDomain: domain,
-                tapRequest: () => {
-                }
+                filter: r => r.url().startsWith(domain)
             })),
             observable.map(either.chain(event => {
                 switch (event._tag) {

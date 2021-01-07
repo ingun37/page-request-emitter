@@ -27,8 +27,7 @@ export type RequestIntercept = {
 export type PPEvent = Log | RequestIntercept;
 
 export type Config = {
-    hookDomain: string,
-    tapRequest: (r: Request) => void
+    filter: (r: Request) => boolean
 }
 
 export function streamPageEvents(page: Page, url: U.URL): ReaderObservableEither<Config, Error, PPEvent> {
@@ -37,8 +36,7 @@ export function streamPageEvents(page: Page, url: U.URL): ReaderObservableEither
             page.setRequestInterception(true).then(() => {
                 page.on("request", async (req) => {
                     try {
-                        config.tapRequest(req);
-                        if (req.url().startsWith(config.hookDomain)) {
+                        if (config.filter(req)) {
                             const requestEvent: RequestIntercept = {_tag: 'RequestIntercept', request: req};
                             if (req.method() === "DELETE") {
                                 subscriber.complete();
