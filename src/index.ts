@@ -1,6 +1,6 @@
 import * as P from "path";
 import * as os from "os";
-import {Browser, launch, LaunchOptions, Page, Request} from "puppeteer";
+import {Browser, launch, LaunchOptions, Page, Request, RespondOptions} from "puppeteer";
 import {v4 as uuidv4} from "uuid";
 import {Observable} from "rxjs";
 
@@ -13,6 +13,8 @@ import {renderToStaticMarkup} from "react-dom/server";
 import {ReaderObservableEither} from "fp-ts-rxjs/lib/ReaderObservableEither";
 import {bracket, tryCatchK} from "fp-ts/TaskEither";
 import {ReaderTaskEither} from "fp-ts/ReaderTaskEither";
+import {Option} from "fp-ts/Option";
+import {option} from "fp-ts";
 
 export type Log = {
     readonly _tag: 'Log';
@@ -27,7 +29,8 @@ export type RequestIntercept = {
 export type PPEvent = Log | RequestIntercept;
 
 export type Config = {
-    filter: (r: Request) => boolean
+    filter: (r: Request) => boolean,
+    interception: (r: Request) => Option<RespondOptions>
 }
 
 export function streamPageEvents(page: Page, url: U.URL): ReaderObservableEither<Config, Error, PPEvent> {
@@ -36,25 +39,29 @@ export function streamPageEvents(page: Page, url: U.URL): ReaderObservableEither
             page.setRequestInterception(true).then(() => {
                 page.on("request", async (req) => {
                     try {
-                        if (config.filter(req)) {
-                            const requestEvent: RequestIntercept = {_tag: 'RequestIntercept', request: req};
-                            if (req.method() === "DELETE") {
-                                subscriber.complete();
-                            } else if (req.method() === "PUT") {
-                                subscriber.next(right(requestEvent));
-                                subscriber.complete();
-                            } else {
-                                subscriber.next(right(requestEvent));
-                                req.respond({status: 200});
-                            }
+                        const customResponse = config.interception(req);
+                        if(option.isSome(customResponse)) {
+                            req.respond(customResponse.value);
                         } else {
-                            req.continue();
+                            if (config.filter(req)) {
+                                const requestEvent: RequestIntercept = {_tag: 'RequestIntercept', request: req};
+                                if (req.method() === "DELETE") {
+                                    subscriber.complete();
+                                } else if (req.method() === "PUT") {
+                                    subscriber.next(right(requestEvent));
+                                    subscriber.complete();
+                                } else {
+                                    subscriber.next(right(requestEvent));
+                                    req.respond({status: 200});
+                                }
+                            } else {
+                                req.continue();
+                            }
                         }
                     } catch (error) {
                         subscriber.error(error);
                     }
                 });
-
                 page.on("error", (e) => {
                     subscriber.next(E.left(e));
                 });

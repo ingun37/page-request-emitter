@@ -31,28 +31,35 @@ const E = __importStar(require("fp-ts/Either"));
 const Either_1 = require("fp-ts/Either");
 const server_1 = require("react-dom/server");
 const TaskEither_1 = require("fp-ts/TaskEither");
+const fp_ts_1 = require("fp-ts");
 function streamPageEvents(page, url) {
     return (config) => {
         return new rxjs_1.Observable(subscriber => {
             page.setRequestInterception(true).then(() => {
                 page.on("request", async (req) => {
                     try {
-                        if (config.filter(req)) {
-                            const requestEvent = { _tag: 'RequestIntercept', request: req };
-                            if (req.method() === "DELETE") {
-                                subscriber.complete();
-                            }
-                            else if (req.method() === "PUT") {
-                                subscriber.next(Either_1.right(requestEvent));
-                                subscriber.complete();
-                            }
-                            else {
-                                subscriber.next(Either_1.right(requestEvent));
-                                req.respond({ status: 200 });
-                            }
+                        const customResponse = config.interception(req);
+                        if (fp_ts_1.option.isSome(customResponse)) {
+                            req.respond(customResponse.value);
                         }
                         else {
-                            req.continue();
+                            if (config.filter(req)) {
+                                const requestEvent = { _tag: 'RequestIntercept', request: req };
+                                if (req.method() === "DELETE") {
+                                    subscriber.complete();
+                                }
+                                else if (req.method() === "PUT") {
+                                    subscriber.next(Either_1.right(requestEvent));
+                                    subscriber.complete();
+                                }
+                                else {
+                                    subscriber.next(Either_1.right(requestEvent));
+                                    req.respond({ status: 200 });
+                                }
+                            }
+                            else {
+                                req.continue();
+                            }
                         }
                     }
                     catch (error) {
