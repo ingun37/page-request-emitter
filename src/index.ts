@@ -8,10 +8,10 @@ import * as fs from "fs";
 import * as U from "url";
 import {pathToFileURL, URL} from "url";
 import * as E from "fp-ts/Either";
-import {Either, right} from "fp-ts/Either";
+import {Either, isRight, right} from "fp-ts/Either";
 import {renderToStaticMarkup} from "react-dom/server";
 import {ReaderObservableEither} from "fp-ts-rxjs/lib/ReaderObservableEither";
-import {bracket, tryCatchK} from "fp-ts/TaskEither";
+import {bracket, TaskEither, tryCatchK} from "fp-ts/TaskEither";
 import {ReaderTaskEither} from "fp-ts/ReaderTaskEither";
 import {Option} from "fp-ts/Option";
 import {option} from "fp-ts";
@@ -30,7 +30,7 @@ export type PPEvent = Log | RequestIntercept;
 
 export type Config = {
     filter: (r: Request) => boolean,
-    interception: (r: Request) => Option<RespondOptions>
+    alterResponse: (r: Request) => Option<TaskEither<Error, RespondOptions>>
 }
 
 export function streamPageEvents(page: Page, url: U.URL): ReaderObservableEither<Config, Error, PPEvent> {
@@ -39,9 +39,18 @@ export function streamPageEvents(page: Page, url: U.URL): ReaderObservableEither
             page.setRequestInterception(true).then(() => {
                 page.on("request", async (req) => {
                     try {
-                        const customResponse = config.interception(req);
+                        const customResponse = config.alterResponse(req);
                         if(option.isSome(customResponse)) {
-                            req.respond(customResponse.value);
+                            customResponse.value().then(eth => {
+                                if(isRight(eth)) {
+                                    req.respond(eth.right)
+                                } else {
+                                    console.error("custom response failed", eth.left);
+                                    req.respond({
+                                        status: 501
+                                    })
+                                }
+                            })
                         } else {
                             if (config.filter(req)) {
                                 const requestEvent: RequestIntercept = {_tag: 'RequestIntercept', request: req};

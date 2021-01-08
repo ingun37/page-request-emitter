@@ -38,9 +38,19 @@ function streamPageEvents(page, url) {
             page.setRequestInterception(true).then(() => {
                 page.on("request", async (req) => {
                     try {
-                        const customResponse = config.interception(req);
+                        const customResponse = config.alterResponse(req);
                         if (fp_ts_1.option.isSome(customResponse)) {
-                            req.respond(customResponse.value);
+                            customResponse.value().then(eth => {
+                                if (Either_1.isRight(eth)) {
+                                    req.respond(eth.right);
+                                }
+                                else {
+                                    console.error("custom response failed", eth.left);
+                                    req.respond({
+                                        status: 501
+                                    });
+                                }
+                            });
                         }
                         else {
                             if (config.filter(req)) {

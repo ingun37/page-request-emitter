@@ -1,12 +1,14 @@
 import {createNewPage, createTmpHTMLURL_JSX, runWithBrowser, streamPageEvents} from "../src";
 import {RequestData} from "./types";
-import {errorTemplate, logTemplate, templateMaker} from "./template";
+import {errorTemplate, interceptTemplate, logTemplate, templateMaker} from "./template";
 import {map, take, toArray} from "rxjs/operators";
 import {left, right} from "fp-ts/Either";
 import {pipe} from "fp-ts/function";
-import {array, either} from "fp-ts";
+import {array, either, taskEither} from "fp-ts";
 import {fromTaskEither, toTaskEither} from "fp-ts-rxjs/lib/ObservableEither";
 import {observable, observableEither} from "fp-ts-rxjs";
+import {none, some} from "fp-ts/Option";
+import {RespondOptions} from "puppeteer";
 
 function common(hookDomain: string, jsx: JSX.Element) {
     const pageinstance = createNewPage();
@@ -19,7 +21,8 @@ function common(hookDomain: string, jsx: JSX.Element) {
             pageinstance(browser),
             fromTaskEither,
             observableEither.chain(page => streamPageEvents(page, pageurl)({
-                filter: (r) => r.url().startsWith(hookDomain)
+                filter: (r) => r.url().startsWith(hookDomain),
+                alterResponse: () => none
             })),
             observable.map(either.chainW(sum => {
                 switch (sum._tag) {
@@ -81,7 +84,8 @@ test("test3", () => {
             createNewPage()(browser),
             fromTaskEither,
             observableEither.chain(page => streamPageEvents(page, pageurl)({
-                filter: r => r.url().startsWith(domain)
+                filter: r => r.url().startsWith(domain),
+                alterResponse: () => none
             })),
             take(1),
             toTaskEither
@@ -103,7 +107,8 @@ test("log test", () => {
             createNewPage()(browser),
             fromTaskEither,
             observableEither.chain(page => streamPageEvents(page, pageurl)({
-                filter: r => r.url().startsWith(domain)
+                filter: r => r.url().startsWith(domain),
+                alterResponse: () => none
             })),
             observable.map(either.chain(event => {
                 switch (event._tag) {
@@ -120,3 +125,44 @@ test("log test", () => {
     })
     return expect(task()).resolves.toStrictEqual(right(logs));
 })
+
+test("intercept", () => {
+    const urla = "http://aaa";
+    const urlb = "http://bbb";
+    const pageurl = createTmpHTMLURL_JSX(interceptTemplate(urla, urlb));
+    const quote = "life! universe! and everything!";
+    const task = runWithBrowser({
+        headless: false,
+        args: ["--no-sandbox", "--disable-web-security"],
+    }, (browser) => {
+        return pipe(
+            createNewPage()(browser),
+            fromTaskEither,
+            observableEither.chain(page => streamPageEvents(page, pageurl)({
+                filter: r => r.url().startsWith(urlb),
+                alterResponse: (r) => {
+                    const respond:RespondOptions = {
+                        status: 200,
+                        body: quote
+                    }
+                    if(r.url().startsWith(urla)) {
+                        return some(taskEither.of(respond))
+                    } else {
+                        return none;
+                    }
+                }
+            })),
+            observable.map(either.chain(event => {
+                switch (event._tag) {
+                    case "Log":
+                        return left(new Error("got request"))
+                    case "RequestIntercept":
+                        return right(event.request.postData())
+                }
+            })),
+            toTaskEither
+        )
+    })
+    return expect(task()).resolves.toStrictEqual(right(quote));
+
+}, 1000 * 60)

