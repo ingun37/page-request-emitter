@@ -1,6 +1,6 @@
 import * as P from "path";
 import * as os from "os";
-import {Browser, launch, LaunchOptions, Page, Request, RespondOptions} from "puppeteer";
+import {Browser, launch, LaunchOptions, Page, Request, RespondOptions, Response} from "puppeteer";
 import {v4 as uuidv4} from "uuid";
 import {Observable} from "rxjs";
 
@@ -31,6 +31,7 @@ export type PPEvent = Log | RequestIntercept;
 export type Config = {
     filter: (r: Request) => boolean,
     alterResponse: (r: Request) => Option<TaskEither<Error, RespondOptions>>
+    debugResponse: (r: Response) => void
 }
 
 export function streamPageEvents(page: Page, url: U.URL): ReaderObservableEither<Config, Error, PPEvent> {
@@ -84,6 +85,9 @@ export function streamPageEvents(page: Page, url: U.URL): ReaderObservableEither
                     subscriber.next(right({_tag: 'Log', message: pageEventObj.text()}))
                 })
 
+                page.on("response", (response) => {
+                    config.debugResponse(response);
+                })
                 page.goto(url.toString()).then(rsp => {
                     if (rsp) {
                         if (rsp.ok()) {

@@ -22,7 +22,8 @@ function common(hookDomain: string, jsx: JSX.Element) {
             fromTaskEither,
             observableEither.chain(page => streamPageEvents(page, pageurl)({
                 filter: (r) => r.url().startsWith(hookDomain),
-                alterResponse: () => none
+                alterResponse: () => none,
+                debugResponse: ()=>{}
             })),
             observable.map(either.chainW(sum => {
                 switch (sum._tag) {
@@ -85,7 +86,8 @@ test("test3", () => {
             fromTaskEither,
             observableEither.chain(page => streamPageEvents(page, pageurl)({
                 filter: r => r.url().startsWith(domain),
-                alterResponse: () => none
+                alterResponse: () => none,
+                debugResponse: ()=>{}
             })),
             take(1),
             toTaskEither
@@ -108,7 +110,8 @@ test("log test", () => {
             fromTaskEither,
             observableEither.chain(page => streamPageEvents(page, pageurl)({
                 filter: r => r.url().startsWith(domain),
-                alterResponse: () => none
+                alterResponse: () => none,
+                debugResponse: ()=>{}
             })),
             observable.map(either.chain(event => {
                 switch (event._tag) {
@@ -150,7 +153,8 @@ test("intercept", () => {
                     } else {
                         return none;
                     }
-                }
+                },
+                debugResponse: ()=>{}
             })),
             observable.map(either.chain(event => {
                 switch (event._tag) {

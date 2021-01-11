@@ -86,6 +86,9 @@ function streamPageEvents(page, url) {
                 page.on("console", (pageEventObj) => {
                     subscriber.next(Either_1.right({ _tag: 'Log', message: pageEventObj.text() }));
                 });
+                page.on("response", (response) => {
+                    config.debugResponse(response);
+                });
                 page.goto(url.toString()).then(rsp => {
                     if (rsp) {
                         if (rsp.ok()) {
