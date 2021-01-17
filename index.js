@@ -19,7 +19,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.runWithBrowser = exports.createTmpHTMLURL_JSX = exports.createTmpHTMLURL = exports.createNewPage = exports.streamPageEvents = void 0;
+exports.runWithBrowser = exports.createTmpHTMLURL_JSX = exports.createTmpHTMLURL = exports.createNewIncognitoPage = exports.createNewPage = exports.streamPageEvents = void 0;
 const P = __importStar(require("path"));
 const os = __importStar(require("os"));
 const puppeteer_1 = require("puppeteer");
@@ -118,6 +118,15 @@ function createNewPage() {
     });
 }
 exports.createNewPage = createNewPage;
+function createNewIncognitoPage() {
+    return TaskEither_1.tryCatchK((browser) => {
+        return browser.createIncognitoBrowserContext().then(xxx => xxx.newPage());
+    }, err => {
+        console.error(err);
+        return new Error("Creating new page failed");
+    });
+}
+exports.createNewIncognitoPage = createNewIncognitoPage;
 function createTmpHTMLURL(html) {
     const tmpHTMLpath = P.resolve(os.tmpdir(), `tmphtml-${uuid_1.v4()}.html`);
     fs.writeFileSync(tmpHTMLpath, html);

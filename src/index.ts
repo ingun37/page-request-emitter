@@ -115,6 +115,14 @@ export function createNewPage(): ReaderTaskEither<Browser, Error, Page> {
     });
 }
 
+export function createNewIncognitoPage(): ReaderTaskEither<Browser, Error, Page> {
+    return tryCatchK((browser: Browser) => {
+        return browser.createIncognitoBrowserContext().then(xxx => xxx.newPage())
+    }, err => {
+        console.error(err);
+        return new Error("Creating new page failed");
+    });
+}
 
 export function createTmpHTMLURL(html: string): URL {
     const tmpHTMLpath = P.resolve(os.tmpdir(), `tmphtml-${uuidv4()}.html`);

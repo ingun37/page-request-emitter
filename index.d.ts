@@ -23,6 +23,7 @@ export declare type Config = {
 };
 export declare function streamPageEvents(page: Page, url: U.URL): ReaderObservableEither<Config, Error, PPEvent>;
 export declare function createNewPage(): ReaderTaskEither<Browser, Error, Page>;
+export declare function createNewIncognitoPage(): ReaderTaskEither<Browser, Error, Page>;
 export declare function createTmpHTMLURL(html: string): URL;
 export declare const createTmpHTMLURL_JSX: (jsx: JSX.Element) => U.URL;
 export declare function runWithBrowser<_T>(launchOptions: LaunchOptions, browserReadingTask: ReaderTaskEither<Browser, Error, _T>): TaskEither<Error, _T>;
